@@ -1,3 +1,6 @@
 [submodule "leaves"]
 	path = leaves
 	url = git@github.com:driedfruit/leaves.h.git
+[submodule "hash"]
+	path = hash
+	url = git@github.com:driedfruit/hashtrie
