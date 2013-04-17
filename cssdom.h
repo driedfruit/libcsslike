@@ -1,8 +1,8 @@
 #ifndef __CSSDOM_H_
 #define __CSSDOM_H_
 
-#include "leaves.h"
-#include "../hash-je/stash.h"
+#include "leaves/leaves.h"
+#include "hash/stash.h"
 
 typedef struct css_rule css_ruleset;
 typedef struct css_rule css_rule;
