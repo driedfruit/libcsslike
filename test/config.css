@@ -1,0 +1,10 @@
+buildings#aviary.human {
+	birds: 42;
+	lang: en-egb;
+}
+buildings *[lang=en] {
+	is_english: 1;
+}
+buildings .human {
+	is_human: 1;
+}
