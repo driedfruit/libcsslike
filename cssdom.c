@@ -141,31 +141,42 @@ css_target* css_target_parse(const char *str) {
 	return root_target;
 }
 
-/* TODO: Rewrite this to be more generic, use separate file-loading
- * and parsing functions (to allow different sources), add error checks... */
-css_ruleset* css_load_file(const char *filename) {
+css_parser* css_parser_create() {
 
-	css_ruleset *style = NULL;
+	css_parser *state = NULL;
 
-	FILE *p = fopen(filename, "r");
-    if (p == NULL) return NULL;
+	state = malloc(sizeof(css_parser));
+	if (state != NULL) {
+		memset(state, 0, sizeof(css_parser));
 
-#define LARGE_BUFFER 1
-#define SELECTOR_BUFFER 128
-#define PROPERTY_BUFFER 128
-#define VALUE_BUFFER 256
+		/* Point to selector buffer */
+		state->tobuf = state->selector_buffer;
+		state->tobuf_space = sizeof(state->selector_buffer);
+	}
 
-	char buf[LARGE_BUFFER];
-	char buf2[SELECTOR_BUFFER];
-	char buf3[PROPERTY_BUFFER];
-	char buf4[VALUE_BUFFER];
+	return state;
+}
 
-	char *tobuf; /* pointer to one of the above buffers */
-	int tobuf_space; /* space left in said buffer */
+css_ruleset* css_parser_done(css_parser *state) {
 
-#define CHANGE_BUFFER(BUFF) tobuf = (BUFF); *tobuf = 0; tobuf_space = sizeof((BUFF)) 
+	css_ruleset *ret = state->style;
 
-	int have = 0;
+	if (state->num_rules || state->num_selectors) {
+		fprintf(stderr, "Critical: Have %d unfinished rules, %d unfinished selectors!\n", state->num_rules, state->num_selectors); 
+	}
+
+	free(state);
+
+	return ret;
+}
+
+/* TODO: add more error checks, cut corner cases */
+int css_parse(css_parser *state, const char *data, int len) {
+
+#define CHANGE_BUFFER(BUFF)	\
+	state->tobuf = (BUFF); \
+	*(state->tobuf) = 0; \
+	state->tobuf_space = sizeof((BUFF)) 
 
 #define OUTER_SPACE 0 /* whitespace outside the ___sel{}___ */
 #define INNER_SPACE 9 /* whitespace inside the {___prop:val;___} */
@@ -178,205 +189,203 @@ css_ruleset* css_load_file(const char *filename) {
 #define PROPERTY 6
 #define VALUE 7
 
-	css_target *selectors[1024];
-	int num_selectors = 0;
+	int i, j;
 
-    css_rule *rules[1024];
-    int num_rules = 0;
-
-    int i, j;
-
-	int sector = OUTER_SPACE;
-	int prev_sector = OUTER_SPACE;
-
-    buf2[0] = buf3[0] = buf4[0] = 0; /* clear buffers (no need, but helps in debug) */
-
-	CHANGE_BUFFER(buf2);
-
-	while (p || have) {
-		if (p) {
-			if (!feof(p)) {
-				int n = fread(&buf[have], 1, LARGE_BUFFER - have, p);
-				//buf[have + n] = 0;
-				have += n;
-			} else {
-				fclose(p);
-				p = NULL;
-			}
-		}
-
-		int parsed = 0;
-		int extra_space = 0;
 #if 0
-        printf("\n");//debug
-        printf("BUF2>> %s[end]\n", buf2);
-        printf("BUF3>> %s[end]\n", buf3);
-        printf("BUF4>> %s[end]\n", buf4);
+	printf("\n");//debug
+	printf("BUF2>> %s[end]\n", state->selector_buffer);
+	printf("BUF3>> %s[end]\n", state->propety_buffer);
+	printf("BUF4>> %s[end]\n", state->value_buffer);
 #endif
-		for (i = 0; i < have; i++) {
-			char c = buf[i];
 
-			//printf("[%d] -- %c\n", sector, c);
-			//if ( c == '\n' || c == '\r' || c == '\t') continue;			
-            parsed = i + 1;
+	for (i = 0; i < len; i++) {
+		char c = data[i];
 
-			if (isspace(c)) {
-			    if (sector == OUTER_SPACE) continue; /* ignore outer whitespace */
-			    if (sector == PROPERTY) continue; /* ignore whitespace in property names -- note, not clean, might lead to errors */
-			    if (sector == INNER_SPACE) continue; /* ignore whitespace after property values */
-			    if (sector == MIDDLE_SPACE) continue; /* ignore whitespace inside rule blocks? */
-    		}
+		//printf("[%d] -- %c\n", sector, c);
+		//if ( c == '\n' || c == '\r' || c == '\t') continue;
 
-			if (c == '/' && sector == COMMENT) { /* end of comment */
-			    /* pop sector */
-				sector = prev_sector;
-				prev_sector = 0;
-				continue;
+		if (isspace(c)) {
+			if (state->sector == OUTER_SPACE) continue; /* ignore outer whitespace */
+			if (state->sector == PROPERTY) continue; /* ignore whitespace in property names -- note, not clean, might lead to errors */
+			if (state->sector == INNER_SPACE) continue; /* ignore whitespace after property values */
+			if (state->sector == MIDDLE_SPACE) continue; /* ignore whitespace inside rule blocks? */
+		}
+
+		if (c == '/' && state->sector == COMMENT) { /* end of comment */
+			/* pop sector */
+			state->sector = state->prev_sector;
+			state->prev_sector = 0;
+			continue;
+		}
+
+		if (state->sector == COMMENT) { /* inside a comment, ignore */
+			continue;
+		}
+
+		if (c == '/') { /* start of comment */
+			/* push sector */
+			state->prev_sector = state->sector;
+			state->sector = COMMENT;
+			continue;
+		}
+
+		if (c == 0) break; /* not readable */
+
+		if (c == ',') { /* end of selector? */
+			if (state->sector == SELECTORS) {
+				//printf("Got selector %d: `%s`\n", num_selectors, buf2);
+				state->selectors[state->num_selectors++] = css_target_parse(state->selector_buffer);
+				CHANGE_BUFFER(state->selector_buffer);
+				state->sector = OUTER_SPACE;
+				break;
 			}
+		}
 
-			if (sector == COMMENT) { /* inside a comment, ignore */
-			    continue; 
+		if (c == '{') { /* start of rule block? */
+			if (state->sector == SELECTORS) {
+                //printf("Got last selector: `%s`\n", buf2);
+				state->selectors[state->num_selectors++] = css_target_parse(state->selector_buffer);
+				CHANGE_BUFFER(state->selector_buffer);
 			}
-
-			if (c == '/') { /* start of comment */
-			    /* push sector */
-				prev_sector = sector;
-				sector = COMMENT;
-				continue;
+			/* now, create empty rules for each selector */
+			for (j = 0; j < state->num_selectors; j++) {
+				state->rules[j] = css_rule_create(state->selectors[j], NULL, NULL);
+				state->num_rules++;
+				if (!state->style)	state->style = state->rules[j];
+				else 		css_rule_add_next(state->style, state->rules[j]);
 			}
+			/* and reset "pending" selectors */
+			state->num_selectors = 0;
 
-			if (c == 0) break; /* not readable */
-
-			if (c == ',') { /* end of selector? */
-				if (sector == SELECTORS) {
-					//printf("Got selector %d: `%s`\n", num_selectors, buf2);
-					selectors[num_selectors++] = css_target_parse(buf2);
-					CHANGE_BUFFER(buf2);
-					sector = OUTER_SPACE;
-					break;
-				}
-			}
-
-			if (c == '{') { /* start of rule block? */
-				if (sector == SELECTORS) {
-                    //printf("Got last selector: `%s`\n", buf2);
-					selectors[num_selectors++] = css_target_parse(buf2);
-					CHANGE_BUFFER(buf2);
-				}
-				/* now, create empty rules for each selector */
-				for (j = 0; j < num_selectors; j++) {
-					rules[j] = css_rule_create(selectors[j], NULL, NULL);
-					num_rules++;
-					if (!style)	style = rules[j];
-					else 		css_rule_add_next(style, rules[j]);
-				}
-				/* and reset "pending" selectors */
-				num_selectors = 0;
-
-				sector = INNER_SPACE;
-				continue;
-			}
+			state->sector = INNER_SPACE;
+			continue;
+		}
 /*
-			if (sector == SELECTORS) { // inside selectors, condense all spaces
-				if (isspace(c))	{ extra_space = 1; continue; }
-				else if (extra_space) {
-					*tobuf++ = ' ';
-					extra_space = 0;
-				}
+		if (sector == SELECTORS) { // inside selectors, condense all spaces
+			if (isspace(c))	{ extra_space = 1; continue; }
+			else if (extra_space) {
+				*tobuf++ = ' ';
+				extra_space = 0;
 			}
+		}
 */
-            if (c == ':' && sector == PROPERTY) { /* end of property name */
-                sector = MIDDLE_SPACE;
-                continue;
-			}
-
-			if (c == ';' && sector == VALUE) { /* end of property value */
-                /* add prop/value to all pending rules */
-   				for (j = 0; j < num_rules; j++) css_rule_add_one(rules[j], (buf3), strtrim(buf4));
-   				//printf("Added `%s=%s` to %d rule(s)\n", buf3, buf4, num_rules);
-
-                sector = INNER_SPACE;
-                continue;
-			}
-
-            if (c == '}') {
-                if (sector == VALUE) {
-                    /* add prop/value to all pending rules */
-                    for (j = 0; j < num_rules; j++) css_rule_add_one(rules[j], (buf3), strtrim(buf4));    
-                    //printf("Added `%s=%s` to %d rule(s)\n", buf3, buf4, num_rules);
-                }
-                else if (sector != INNER_SPACE) {
-                    fprintf(stderr, "Unexpected '}', expected value or ';'\n");
-                    return NULL;
-                }
-                /* reset rules */
-                num_rules = 0;
-
-                sector = OUTER_SPACE;
-                continue;
-            }
-
-            if (!isspace(c)) {
-                if (sector == INNER_SPACE) { /* start of property name */
-                    sector = PROPERTY;
-                    CHANGE_BUFFER(buf3); /* select "property" buffer for output */ 
-                }
-                if (sector == MIDDLE_SPACE) { /* start of value */
-                    sector = VALUE;
-                    CHANGE_BUFFER(buf4); /* select "value" buffer for output */ 
-                }
-            }
-
-			if (c == '"') { /* push/pop in-string */
-				if (sector == SUBSTRING) {
-					sector = prev_sector;
-					prev_sector = 0;
-				} else {
-					prev_sector = sector;
-					sector = SUBSTRING;
-				}
-				continue;
-			}
-
-			if (isalpha(c) || c == '*' || c == '.' || c == '#') { 
-				if (sector == OUTER_SPACE) { /* start of selector(s) */
-					sector = SELECTORS;
-					extra_space = 0;
-
-					CHANGE_BUFFER(buf2); /* select "selectors" buffer for output */ 
-				}
-			}
-
-            /* Buffer overflow */
-            if (tobuf_space < 2) {
-                fprintf(stderr, "No buffer space to store selector/property/value, ABORTING parsing.\n");
-                return NULL;
-            }
-
-			//printf("Saving `%c`, space left: %d\n", c, tobuf_space);
-
-            /* Save character to either buffer */            
-			*tobuf++ = c; 
-			*tobuf = 0;
-			tobuf_space--;
+		if (c == ':' && state->sector == PROPERTY) { /* end of property name */
+			state->sector = MIDDLE_SPACE;
+			continue;
 		}
 
-		if (parsed) {
-#if (LARGE_BUFFER >= 1024)
-		    memcpy(&buf[0], &buf[parsed], sizeof(char) * parsed);
-#else
-			for (i = 0; i < have; i++) buf[i] = buf[i + parsed];
-#endif
-			have -= parsed;
-			buf[have] = 0;
-			parsed = 0;
+		if (c == ';' && state->sector == VALUE) { /* end of property value */
+			/* add prop/value to all pending rules */
+			for (j = 0; j < state->num_rules; j++)
+				css_rule_add_one(state->rules[j], state->property_buffer, strtrim(state->value_buffer));
+			//printf("Added `%s=%s` to %d rule(s)\n", buf3, buf4, num_rules);
+
+			state->sector = INNER_SPACE;
+			continue;
 		}
+
+		if (c == '}') {
+			if (state->sector == VALUE) {
+				/* add prop/value to all pending rules */
+				for (j = 0; j < state->num_rules; j++) 
+					css_rule_add_one(state->rules[j], state->property_buffer, strtrim(state->value_buffer));    
+				//printf("Added `%s=%s` to %d rule(s)\n", buf3, buf4, num_rules);
+			}
+			else if (state->sector != INNER_SPACE) {
+				fprintf(stderr, "Unexpected '}', expected value or ';'\n");
+				return 1;
+			}
+			/* reset rules */
+			state->num_rules = 0;
+
+			state->sector = OUTER_SPACE;
+			continue;
+		}
+
+		if (!isspace(c)) {
+			if (state->sector == INNER_SPACE) { /* start of property name */
+				state->sector = PROPERTY;
+				CHANGE_BUFFER(state->property_buffer); /* select "property" buffer for output */ 
+			}
+			if (state->sector == MIDDLE_SPACE) { /* start of value */
+				state->sector = VALUE;
+				CHANGE_BUFFER(state->value_buffer); /* select "value" buffer for output */ 
+			}
+		}
+
+		if (c == '"') { /* push/pop in-string */
+			if (state->sector == SUBSTRING) {
+				state->sector = state->prev_sector;
+				state->prev_sector = 0;
+			} else {
+				state->prev_sector = state->sector;
+				state->sector = SUBSTRING;
+			}
+			continue;
+		}
+
+		if (isalpha(c) || c == '*' || c == '.' || c == '#') { 
+			if (state->sector == OUTER_SPACE) { /* start of selector(s) */
+				state->sector = SELECTORS;
+
+				CHANGE_BUFFER(state->selector_buffer); /* select "selectors" buffer for output */ 
+			}
+		}
+
+		/* Buffer overflow */
+		if (state->tobuf_space < 2) {
+			fprintf(stderr, "No buffer space to store selector/property/value, ABORTING parsing.\n");
+			return 1;
+		}
+
+		//printf("Saving `%c`, space left: %d\n", c, tobuf_space);
+
+		/* Save character to either buffer */
+		*state->tobuf++ = c; 
+		*state->tobuf = 0;
+		state->tobuf_space--;
 	}
 
-    if (num_rules || num_selectors) {
-        fprintf(stderr, "Critical: Have %d unfinished rules, %d unfinished selectors!\n", num_rules, num_selectors); 
-    }
+	return 0;
+}
 
+css_ruleset* css_load_file(const char *filename) {
+
+	css_ruleset *style = NULL;
+	css_parser *state;
+	FILE *f;
+
+	char buf[1024];
+	int n, err;
+
+	f = fopen(filename, "r");
+	if (f == NULL) return NULL; /* Failed to open file */
+
+	state = css_parser_create();
+	if (state == NULL) { /* Failed to malloc */
+		fclose(f);
+		return NULL;
+	}
+
+	/* Read file */
+	while (!feof(f)) {
+
+		n = fread(buf, 1, sizeof(buf), f);
+
+		err = css_parse(state, buf, n);
+
+		if (err) {
+			/* Abnormal termination */
+			fclose(f);
+			css_parser_done(state);
+			return NULL;
+		}
+
+	}
+
+	/* Normal termination */
+	fclose(f);
+	style = css_parser_done(state);
 	return style;
 }
 

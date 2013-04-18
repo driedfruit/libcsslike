@@ -8,6 +8,35 @@ typedef struct css_rule css_ruleset;
 typedef struct css_rule css_rule;
 typedef struct css_target css_target;
 
+typedef struct css_parser css_parser;
+
+#define LARGE_BUFFER 1
+#define SELECTOR_BUFFER 128
+#define PROPERTY_BUFFER 128
+#define VALUE_BUFFER 256
+struct css_parser {
+
+	char selector_buffer[SELECTOR_BUFFER];
+	char property_buffer[PROPERTY_BUFFER];
+	char    value_buffer[VALUE_BUFFER];
+
+	char *tobuf; /* pointer to one of the above buffers */
+	int tobuf_space; /* space left in said buffer */
+
+	css_target *selectors[1024];
+	int num_selectors;
+
+    css_rule *rules[1024];
+    int num_rules;
+
+    int i, j;
+
+	int sector;
+	int prev_sector;
+
+	css_ruleset *style; /* Resulting ruleset */
+};
+
 struct css_rule {
 	css_target *target;
 	stash_t *apps;
@@ -25,7 +54,12 @@ struct css_target {
 EXT_LL_ADD_NEXT(css_target, css_target, next);
 EXT_LL_ADD_NEXT(css_rule, css_rule, next);
 
+extern css_parser* css_parser_create(void);
+
+extern css_ruleset* css_parser_done(css_parser *state);
+extern int css_parse(css_parser *state, const char *data, int len);
 extern css_ruleset* css_load_file(const char *filename);
+
 extern css_rule* css_rule_create(css_target *target, const char *k, const char *v);
 extern css_target* css_target_create(css_target *prev, const char *name, const char *value, const char type, const char rela);
 
@@ -76,5 +110,8 @@ EXT_LLT_PACKAGE(dom, dom_object, childNode, nextSibling, parentNode);
 extern dom_iter dom_object_walker;
 #define dom_select(ROOT, SELECTOR, RESULT, NUM) dom_select_into(&dom_object_walker, ROOT, SELECTOR, RESULT, NUM, 0, 1)
 #define dom_cascade(ROOT, RULES) css_cascade(&dom_object_walker, ROOT, RULES)
+
+extern void css_fprintf(FILE *s, css_ruleset *style);
+extern void dom_fprintf(FILE *s, dom_object *obj);
 
 #endif
