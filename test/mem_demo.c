@@ -1,6 +1,4 @@
-#include "stdio.h"
-#include "malloc.h"
-#include "string.h"
+#include <stdio.h>	/* For stdout */
 
 #include "../cssdom.h"
 
@@ -8,12 +6,12 @@ const char css[] =
 "body {" "\n"
 "	background: red;" "\n"
 "}" "\n"
-"div {" "\n"
+"div, span {" "\n"
 "	display: block;" "\n"
 "}" "\n"
 ;
 
-int main() {
+int main(int argc, char *argv[]) {
 
 	css_ruleset *style;// = css_load_file("config.css");
 	css_parser *state = css_parser_create();
@@ -25,4 +23,6 @@ int main() {
 	css_fprintf(stdout, style);
 
 	css_free(style);
+
+	return 0;
 }

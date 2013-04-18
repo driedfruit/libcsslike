@@ -1,26 +1,27 @@
 #include "stdio.h"
 #include "malloc.h"
 #include "string.h"
+#include <stdlib.h>
 
 #include "../cssdom.h"
 
-css_ruleset *mainCSS;
-
-int conf_get_px(const char* select, const char* attr, int def_value) {
+int conf_get_px(css_ruleset *style, const char* select, const char* attr, int def_value) {
 
 	printf("Staring search\n");
 
 	css_target *trg = css_target_parse(select);
 
-	css_rule *rule = css_find(mainCSS, trg);
+	css_rule *rule = css_find(style, trg);
+
+	css_target_free(trg);
 
 	if (rule) {
-		char gadlos[1024];
-		stash_get(rule->apps, attr, strlen(attr)+1, gadlos);
-		return atoi(gadlos);
+		char tmp[1024];
+		stash_get(rule->apps, attr, strlen(attr)+1, tmp);
+		return atoi(tmp);
 	}
 
-	return def_value;	
+	return def_value;
 }
 
 
@@ -29,7 +30,6 @@ int main() {
 	dom_object root = { NULL, NULL, NULL, NULL };
 
 	css_ruleset *style = css_load_file("config.css");
-	mainCSS = style;
 
 	css_fprintf(stdout, style);
 	
@@ -53,11 +53,12 @@ int main() {
 
 	dom_cascade(&root, style);
 
-	int unit_width = conf_get_px("*#aviary", "birds", 12);
+	int unit_width = conf_get_px(style, "*#aviary", "birds", 12);
 	printf("GOT : %d\n", unit_width);
 
 	dom_fprintf(stdout, all);
 	
+	css_free(style);
 	//inspect(win);
 //	inspect(dor);
 }
