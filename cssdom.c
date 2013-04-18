@@ -202,7 +202,7 @@ int css_parse(css_parser *state, const char *data, int len) {
 #if 0
 	printf("\n");//debug
 	printf("BUF2>> %s[end]\n", state->selector_buffer);
-	printf("BUF3>> %s[end]\n", state->propety_buffer);
+	printf("BUF3>> %s[end]\n", state->property_buffer);
 	printf("BUF4>> %s[end]\n", state->value_buffer);
 #endif
 
