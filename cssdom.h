@@ -1,6 +1,8 @@
 #ifndef __CSSDOM_H_
 #define __CSSDOM_H_
 
+#include <stdio.h>	/* For FILE*, fopen, etc */
+
 #include "leaves/leaves.h"
 #include "hash/stash.h"
 
