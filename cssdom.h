@@ -10,7 +10,6 @@ typedef struct css_target css_target;
 
 typedef struct css_parser css_parser;
 
-#define LARGE_BUFFER 1
 #define SELECTOR_BUFFER 128
 #define PROPERTY_BUFFER 128
 #define VALUE_BUFFER 256
@@ -55,7 +54,6 @@ EXT_LL_ADD_NEXT(css_target, css_target, next);
 EXT_LL_ADD_NEXT(css_rule, css_rule, next);
 
 extern css_parser* css_parser_create(void);
-
 extern css_ruleset* css_parser_done(css_parser *state);
 extern int css_parse(css_parser *state, const char *data, int len);
 extern css_ruleset* css_load_file(const char *filename);
