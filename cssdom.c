@@ -245,7 +245,7 @@ int css_parse(css_parser *state, const char *data, int len) {
 				state->selectors[state->num_selectors++] = css_target_parse(state->selector_buffer);
 				CHANGE_BUFFER(state->selector_buffer);
 				state->sector = OUTER_SPACE;
-				break;
+				continue;
 			}
 		}
 
