@@ -45,6 +45,30 @@ css_target* css_target_create(css_target *prev, const char *name, const char *va
 	return trg;
 }
 
+int css_free(css_ruleset *style) {
+
+	css_ruleset *next_s;
+	css_target *target;
+	css_target *next_t;
+
+	while (style) {
+		next_s = style->next;
+
+		target = style->target;
+		while (target) {
+			next_t = target->next;
+			free(target);
+			target = next_t;
+		}
+
+		stash_free(style->apps);
+		free(style);
+		style = next_s;
+	}
+
+	return 0;
+}
+
 css_target* css_target_parse(const char *str) {
 
 		//printf(" PARSING: %s\n", str);
