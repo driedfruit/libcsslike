@@ -12,6 +12,12 @@ LL_ADD_NEXT(css_target, css_target, next);
 
 LL_ADD_NEXT(css_rule, css_rule, next);
 
+LL_FREE(css_target, css_target, next, { } );
+
+LL_FREE(css, css_ruleset, next, 
+	css_target_free(node->target); \
+	stash_free(node->apps) );
+
 LLT_PACKAGE(dom, dom_object, childNode, nextSibling, parentNode);
 
 void css_rule_add_one(css_rule *rule, const char *k, const char *v) {
@@ -45,29 +51,7 @@ css_target* css_target_create(css_target *prev, const char *name, const char *va
 	return trg;
 }
 
-int css_free(css_ruleset *style) {
 
-	css_ruleset *next_s;
-	css_target *target;
-	css_target *next_t;
-
-	while (style) {
-		next_s = style->next;
-
-		target = style->target;
-		while (target) {
-			next_t = target->next;
-			free(target);
-			target = next_t;
-		}
-
-		stash_free(style->apps);
-		free(style);
-		style = next_s;
-	}
-
-	return 0;
-}
 
 css_target* css_target_parse(const char *str) {
 

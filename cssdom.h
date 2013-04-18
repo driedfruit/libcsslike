@@ -52,13 +52,13 @@ struct css_target {
 
 EXT_LL_ADD_NEXT(css_target, css_target, next);
 EXT_LL_ADD_NEXT(css_rule, css_rule, next);
+EXT_LL_FREE(css_target, css_target);
+EXT_LL_FREE(css, css_ruleset);
 
 extern css_parser* css_parser_create(void);
 extern css_ruleset* css_parser_done(css_parser *state);
 extern int css_parse(css_parser *state, const char *data, int len);
 extern css_ruleset* css_load_file(const char *filename);
-
-extern int css_free(css_ruleset *style);
 
 extern css_rule* css_rule_create(css_target *target, const char *k, const char *v);
 extern css_target* css_target_create(css_target *prev, const char *name, const char *value, const char type, const char rela);
